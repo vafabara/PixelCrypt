@@ -44,3 +44,5 @@ def decode():
         if again.lower() != "y":
             print("Goodbye!")
             break
+
+decode()
