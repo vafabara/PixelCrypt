@@ -142,7 +142,10 @@ class PixelCryptGUI(ctk.CTk):
             corner_radius=12,
             fg_color=("gray90", "gray14")
         )
-        preview.grid(row=0, column=1, rowspan=2, sticky="nsew", padx=(0, 24), pady=24)
+        preview.grid(
+            row=0, column=1, rowspan=2,
+            sticky="nsew", padx=(0, 24), pady=24
+        )
         preview.grid_columnconfigure(0, weight=1)
         preview.grid_rowconfigure(1, weight=1)
 
@@ -157,7 +160,10 @@ class PixelCryptGUI(ctk.CTk):
             text="No image generated",
             text_color="gray"
         )
-        self.preview_label.grid(row=1, column=0, sticky="nsew", padx=20, pady=20)
+        self.preview_label.grid(
+            row=1, column=0,
+            sticky="nsew", padx=20, pady=20
+        )
 
         self.info_label = ctk.CTkLabel(
             preview,
@@ -198,7 +204,10 @@ class PixelCryptGUI(ctk.CTk):
             text="Browse",
             width=100,
             command=self.choose_decode_file
-        ).grid(row=1, column=1, sticky="w", padx=(10, 0), pady=(8, 20))
+        ).grid(
+            row=1, column=1,
+            sticky="w", padx=(10, 0), pady=(8, 20)
+        )
 
         result_frame = ctk.CTkFrame(
             self.decode_frame,
@@ -216,7 +225,10 @@ class PixelCryptGUI(ctk.CTk):
             result_frame,
             text="Decoded text",
             font=ctk.CTkFont(size=15, weight="bold")
-        ).grid(row=0, column=0, sticky="w", padx=16, pady=(14, 8))
+        ).grid(
+            row=0, column=0,
+            sticky="w", padx=16, pady=(14, 8)
+        )
 
         self.decoded_text = ctk.CTkTextbox(
             result_frame,
@@ -298,8 +310,7 @@ class PixelCryptGUI(ctk.CTk):
 
         ascii_codes = [ord(char) for char in text]
 
-        # The original encoder stores one character in the red channel.
-        # RGB channels are limited to 0-255, so reject unsupported characters.
+        # RGB channels are limited to 0-255.
         if any(code > 255 for code in ascii_codes):
             messagebox.showerror(
                 "Unsupported character",
@@ -307,17 +318,36 @@ class PixelCryptGUI(ctk.CTk):
             )
             return
 
-        pixel_count = len(ascii_codes)
+        # Three characters can be stored in every pixel:
+        # Red -> Green -> Blue
+        pixel_count = math.ceil(len(ascii_codes) / 3)
         size = math.ceil(math.sqrt(pixel_count))
 
         image = Image.new("RGB", (size, size), (0, 0, 0))
 
         index = 0
+
         for y in range(size):
             for x in range(size):
-                if index < pixel_count:
-                    image.putpixel((x, y), (ascii_codes[index], 0, 0))
+                if index < len(ascii_codes):
+                    red = ascii_codes[index]
                     index += 1
+                else:
+                    red = 0
+
+                if index < len(ascii_codes):
+                    green = ascii_codes[index]
+                    index += 1
+                else:
+                    green = 0
+
+                if index < len(ascii_codes):
+                    blue = ascii_codes[index]
+                    index += 1
+                else:
+                    blue = 0
+
+                image.putpixel((x, y), (red, green, blue))
 
         file_path = os.path.join(location, filename)
 
@@ -329,13 +359,18 @@ class PixelCryptGUI(ctk.CTk):
 
         self.show_preview(image)
 
+        capacity = size * size * 3
+
         self.info_label.configure(
-            text=f"{size} × {size}  •  {pixel_count} characters"
+            text=f"{size} × {size}  •  {len(ascii_codes)} characters  •  RGB"
         )
 
         messagebox.showinfo(
             "Done",
-            f"Image created successfully.\n\nSaved to:\n{file_path}"
+            f"Image created successfully.\n\n"
+            f"Capacity: {capacity} characters\n"
+            f"Characters used: {len(ascii_codes)}\n\n"
+            f"Saved to:\n{file_path}"
         )
 
     # ---------------- DECODE ----------------
@@ -358,6 +393,7 @@ class PixelCryptGUI(ctk.CTk):
             return
 
         text = ""
+        finished = False
 
         width, height = image.size
 
@@ -365,14 +401,19 @@ class PixelCryptGUI(ctk.CTk):
             for x in range(width):
                 red, green, blue = image.getpixel((x, y))
 
-                if red == 0:
+                # Read channels in the same order used by the encoder.
+                for value in (red, green, blue):
+                    if value == 0:
+                        finished = True
+                        break
+
+                    text += chr(value)
+
+                if finished:
                     break
 
-                text += chr(red)
-            else:
-                continue
-
-            break
+            if finished:
+                break
 
         self.decoded_text.delete("1.0", "end")
         self.decoded_text.insert("1.0", text)
